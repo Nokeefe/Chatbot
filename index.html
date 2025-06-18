@@ -94,6 +94,29 @@
             border-color: #667eea;
         }
 
+        #micButton {
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: transform 0.2s ease;
+            min-width: 60px;
+        }
+
+        #micButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+
+        #micButton.listening {
+            background: linear-gradient(135deg, #ff9f43 0%, #ff6348 100%);
+            animation: pulse 1.5s infinite;
+        }
+
         #sendButton {
             padding: 15px 25px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -130,6 +153,15 @@
             animation: dots 1.5s steps(5, end) infinite;
         }
 
+        .speech-status {
+            text-align: center;
+            padding: 10px;
+            color: #666;
+            font-size: 14px;
+            font-style: italic;
+            display: none;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -140,6 +172,12 @@
             40% { content: '..'; }
             60% { content: '...'; }
             80%, 100% { content: ''; }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
         }
 
         @media (max-width: 768px) {
@@ -163,16 +201,21 @@
         
         <div class="chat-messages" id="chatMessages">
             <div class="message ai-message">
-                👋 Hello! I'm your AI assistant. How can I help you today?
+                👋 Hello! I'm your AI assistant. How can I help you today? You can type your message or use the microphone to speak!
             </div>
         </div>
         
         <div class="loading" id="loading">
             AI is thinking
         </div>
+
+        <div class="speech-status" id="speechStatus">
+            Listening... Speak now!
+        </div>
         
         <div class="input-container">
-            <input type="text" id="messageInput" placeholder="Type your message here..." />
+            <input type="text" id="messageInput" placeholder="Type your message here or click the microphone..." />
+            <button id="micButton" title="Speak">🎤</button>
             <button id="sendButton">Send</button>
         </div>
     </div>
@@ -181,7 +224,89 @@
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.getElementById('sendButton');
+        const micButton = document.getElementById('micButton');
         const loading = document.getElementById('loading');
+        const speechStatus = document.getElementById('speechStatus');
+
+        // Speech Recognition Setup
+        let recognition;
+        let isListening = false;
+
+        // Check if browser supports speech recognition
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = function() {
+                isListening = true;
+                micButton.classList.add('listening');
+                micButton.textContent = '🎙️';
+                speechStatus.style.display = 'block';
+                speechStatus.textContent = 'Listening... Speak now!';
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                messageInput.value = transcript;
+                speechStatus.textContent = `You said: "${transcript}"`;
+                
+                // Automatically send the message after a brief delay
+                setTimeout(() => {
+                    sendMessage();
+                }, 1000);
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                speechStatus.textContent = `Speech recognition error: ${event.error}`;
+                stopListening();
+                
+                if (event.error === 'not-allowed') {
+                    alert('Microphone access denied. Please allow microphone access and try again.');
+                } else if (event.error === 'no-speech') {
+                    speechStatus.textContent = 'No speech detected. Please try again.';
+                } else {
+                    speechStatus.textContent = 'Speech recognition failed. Please try again.';
+                }
+            };
+
+            recognition.onend = function() {
+                stopListening();
+                setTimeout(() => {
+                    speechStatus.style.display = 'none';
+                }, 3000);
+            };
+
+        } else {
+            // Browser doesn't support speech recognition
+            micButton.style.display = 'none';
+            console.log('Speech recognition not supported in this browser');
+        }
+
+        function startListening() {
+            if (recognition && !isListening) {
+                try {
+                    recognition.start();
+                } catch (error) {
+                    console.error('Error starting speech recognition:', error);
+                    alert('Error starting speech recognition. Please try again.');
+                }
+            }
+        }
+
+        function stopListening() {
+            isListening = false;
+            micButton.classList.remove('listening');
+            micButton.textContent = '🎤';
+            if (recognition) {
+                recognition.stop();
+            }
+        }
 
         function addMessage(content, isUser = false) {
             const messageDiv = document.createElement('div');
@@ -226,6 +351,8 @@
                     addMessage(`Error: ${data.error}`);
                 } else {
                     addMessage(data.reply);
+                    // Optional: Speak the AI response
+                    speakResponse(data.reply);
                 }
             } catch (error) {
                 addMessage(`Error: ${error.message}`);
@@ -234,7 +361,27 @@
             hideLoading();
         }
 
+        function speakResponse(text) {
+            // Optional: Make the AI response audible
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                utterance.rate = 0.9;
+                utterance.pitch = 1;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // Event listeners
         sendButton.addEventListener('click', sendMessage);
+
+        micButton.addEventListener('click', function() {
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        });
 
         messageInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
