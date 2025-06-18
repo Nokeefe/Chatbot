@@ -4,11 +4,11 @@ import os
 
 app = Flask(__name__)
 
-# Set your Gemini API key directly here or from environment
-genai.configure(api_key="AIzaSyBu4cBQ_DC7tj-OcexuJHppAMNUjK4Oe08")  # Replace with actual key
+# Configure Gemini API
+genai.configure(api_key="AIzaSyBu4cBQ_DC7tj-OcexuJHppAMNUjK4Oe08")  # Use a secure method in production
 
-# Create the model
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+# Use Gemini model (correct latest name)
+model = genai.GenerativeModel("gemini-1.5-flash")  # Remove "models/" prefix
 
 @app.route("/")
 def index():
@@ -23,12 +23,17 @@ def ask():
         if not prompt:
             return jsonify({"error": "No input"}), 400
 
-        # Send prompt to Gemini
+        # Generate Gemini response
         response = model.generate_content(prompt)
+
         return jsonify({"reply": response.text.strip()})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/test")
+def test():
+    return jsonify({"status": "Flask working and Gemini model loaded"})
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=5000)
